@@ -9,6 +9,7 @@ let isSDKReady = false;
 let canvas = document.getElementById('canvas');
 let img = new Image();
 let image_file = document.getElementById('image_file');
+let points;
 
 canvas.addEventListener('dragover', function (event) {
     event.preventDefault();
@@ -148,57 +149,109 @@ async function detect() {
     detection_result.innerHTML = "";
     let context = canvas.getContext('2d');
     context.clearRect(0, 0, canvas.width, canvas.height);
+    try {
+        if (barcode_checkbox.checked) {
+            let barcodeResults = await reader.decode(img);
+            if (barcodeResults.length > 0) {
+                let txts = [];
+                for (var i = 0; i < barcodeResults.length; ++i) {
+                    txts.push(barcodeResults[i].barcodeText);
+                    localization = barcodeResults[i].localizationResult;
+                    text = barcodeResults[i].barcodeText;
 
-    if (barcode_checkbox.checked) {
-        let barcodeResults = await reader.decode(img);
-        if (barcodeResults.length > 0) {
-            let txts = [];
-            for (var i = 0; i < barcodeResults.length; ++i) {
-                txts.push(barcodeResults[i].barcodeText);
-                localization = barcodeResults[i].localizationResult;
-                text = barcodeResults[i].barcodeText;
+                    // Draw overlay
+                    context.beginPath();
+                    context.strokeStyle = '#ff0000';
+                    context.lineWidth = 2;
+                    context.moveTo(localization.x1, localization.y1);
+                    context.lineTo(localization.x2, localization.y2);
+                    context.lineTo(localization.x3, localization.y3);
+                    context.lineTo(localization.x4, localization.y4);
+                    context.lineTo(localization.x1, localization.y1);
+                    context.stroke();
 
-                // Draw overlay
-                context.beginPath();
-                context.strokeStyle = '#ff0000';
-                context.lineWidth = 2;
-                context.moveTo(localization.x1, localization.y1);
-                context.lineTo(localization.x2, localization.y2);
-                context.lineTo(localization.x3, localization.y3);
-                context.lineTo(localization.x4, localization.y4);
-                context.lineTo(localization.x1, localization.y1);
-                context.stroke();
+                    context.font = '18px Verdana';
+                    context.fillStyle = '#ff0000';
+                    let x = [localization.x1, localization.x2, localization.x3, localization.x4];
+                    let y = [localization.y1, localization.y2, localization.y3, localization.y4];
+                    x.sort(function (a, b) {
+                        return a - b;
+                    });
+                    y.sort(function (a, b) {
+                        return b - a;
+                    });
+                    let left = x[0];
+                    let top = y[0];
 
-                context.font = '18px Verdana';
-                context.fillStyle = '#ff0000';
-                let x = [localization.x1, localization.x2, localization.x3, localization.x4];
-                let y = [localization.y1, localization.y2, localization.y3, localization.y4];
-                x.sort(function (a, b) {
-                    return a - b;
-                });
-                y.sort(function (a, b) {
-                    return b - a;
-                });
-                let left = x[0];
-                let top = y[0];
-
-                context.fillText(text, left, top + 50);
+                    context.fillText(text, left, top + 50);
+                }
+                detection_result.innerHTML += txts.join(', ') + '\n';
             }
-            detection_result.innerHTML += txts.join(', ') + '\n';
         }
-    }
 
-    if (mrz_checkbox.checked) {
-        let mrzResults = await recognizer.recognize(img);
-        let txts = [];
-        for (let result of mrzResults) {
-            for (let line of result.lineResults) {
-                let text = line.text;
-                let points = line.location.points;
+        if (mrz_checkbox.checked) {
+            let mrzResults = await recognizer.recognize(img);
+            let txts = [];
+            for (let result of mrzResults) {
+                for (let line of result.lineResults) {
+                    let text = line.text;
+                    let points = line.location.points;
+                    // Draw overlay
+                    context.beginPath();
+                    context.strokeStyle = '#0000ff';
+                    context.lineWidth = 2;
+                    context.moveTo(points[0].x, points[0].y);
+                    context.lineTo(points[1].x, points[1].y);
+                    context.lineTo(points[2].x, points[2].y);
+                    context.lineTo(points[3].x, points[3].y);
+                    context.lineTo(points[0].x, points[0].y);
+                    context.stroke();
+
+                    context.font = '18px Verdana';
+                    context.fillStyle = '#ff0000';
+                    let x = [points[0].x, points[1].x, points[0].x, points[0].x];
+                    let y = [points[0].y, points[1].y, points[0].y, points[0].y];
+                    x.sort(function (a, b) {
+                        return a - b;
+                    });
+                    y.sort(function (a, b) {
+                        return b - a;
+                    });
+                    let left = x[0];
+                    let top = y[0];
+
+                    context.fillText(text, left, top);
+                    txts.push(text);
+                }
+            }
+
+            if (txts.length == 2) {
+                detection_result.innerHTML += JSON.stringify(mrzParseTwoLine(txts[0], txts[1])) + '\n';
+            }
+            else if (txts.length == 3) {
+                detection_result.innerHTML += JSON.stringify(mrzParseThreeLine(txts[0], txts[1], txts[2])) + '\n';
+            }
+        }
+
+        if (document_checkbox.checked) {
+            let documentResults = await normalizer.detectQuad(img);
+
+            if (documentResults.length > 0) {
+                let quad = documentResults[0];
+                points = quad.location.points;
+
+                // canvas.addEventListener("mousedown", (event) => updatePoint(event, context));
+                // canvas.addEventListener("touchstart", (event) => updatePoint(event, context));
+
                 // Draw overlay
-                context.beginPath();
-                context.strokeStyle = '#0000ff';
+                context.strokeStyle = "#00ff00";
                 context.lineWidth = 2;
+                for (let i = 0; i < points.length; i++) {
+                    context.beginPath();
+                    context.arc(points[i].x, points[i].y, 5, 0, 2 * Math.PI);
+                    context.stroke();
+                }
+                context.beginPath();
                 context.moveTo(points[0].x, points[0].y);
                 context.lineTo(points[1].x, points[1].y);
                 context.lineTo(points[2].x, points[2].y);
@@ -206,8 +259,6 @@ async function detect() {
                 context.lineTo(points[0].x, points[0].y);
                 context.stroke();
 
-                context.font = '18px Verdana';
-                context.fillStyle = '#ff0000';
                 let x = [points[0].x, points[1].x, points[0].x, points[0].x];
                 let y = [points[0].y, points[1].y, points[0].y, points[0].y];
                 x.sort(function (a, b) {
@@ -218,59 +269,75 @@ async function detect() {
                 });
                 let left = x[0];
                 let top = y[0];
-
-                context.fillText(text, left, top);
-                txts.push(text);
+                context.font = '18px Verdana';
+                context.fillStyle = '#00ff00';
+                context.fillText('Detected document', left, top);
             }
         }
-
-        if (txts.length == 2) {
-            detection_result.innerHTML += JSON.stringify(mrzParseTwoLine(txts[0], txts[1])) + '\n';
-        }
-        else if (txts.length == 3) {
-            detection_result.innerHTML += JSON.stringify(mrzParseThreeLine(txts[0], txts[1], txts[2])) + '\n';
+        else {
+            points = null;
         }
     }
-
-    if (document_checkbox.checked) {
-        let documentResults = await normalizer.detectQuad(img);
-
-        if (documentResults.length > 0) {
-            let quad = documentResults[0];
-            let points = quad.location.points;
-
-            // Draw overlay
-            context.strokeStyle = "#00ff00";
-            context.lineWidth = 2;
-            for (let i = 0; i < points.length; i++) {
-                context.beginPath();
-                context.arc(points[i].x, points[i].y, 5, 0, 2 * Math.PI);
-                context.stroke();
-            }
-            context.beginPath();
-            context.moveTo(points[0].x, points[0].y);
-            context.lineTo(points[1].x, points[1].y);
-            context.lineTo(points[2].x, points[2].y);
-            context.lineTo(points[3].x, points[3].y);
-            context.lineTo(points[0].x, points[0].y);
-            context.stroke();
-
-            let x = [points[0].x, points[1].x, points[0].x, points[0].x];
-            let y = [points[0].y, points[1].y, points[0].y, points[0].y];
-            x.sort(function (a, b) {
-                return a - b;
-            });
-            y.sort(function (a, b) {
-                return b - a;
-            });
-            let left = x[0];
-            let top = y[0];
-            context.font = '18px Verdana';
-            context.fillStyle = '#00ff00';
-            context.fillText('Detected document', left, top);
-        }
+    catch (ex) {
+        console.error(ex);
     }
+
     toggleLoading(false);
+}
+
+function updatePoint(e, context) {
+    if (!points) {
+        return;
+    }
+    let rect = canvas.getBoundingClientRect();
+
+    let scaleX = canvas.clientWidth / canvas.width;
+    let scaleY = canvas.clientHeight / canvas.height;
+    let mouseX = (e.clientX - rect.left) / scaleX;
+    let mouseY = (e.clientY - rect.top) / scaleY;
+
+    let delta = 10;
+    for (let i = 0; i < points.length; i++) {
+        if (Math.abs(points[i].x - mouseX) < delta && Math.abs(points[i].y - mouseY) < delta) {
+            canvas.addEventListener("mousemove", dragPoint);
+            canvas.addEventListener("mouseup", releasePoint);
+            canvas.addEventListener("touchmove", dragPoint);
+            canvas.addEventListener("touchend", releasePoint);
+            function dragPoint(e) {
+                let rect = canvas.getBoundingClientRect();
+                let mouseX = e.clientX || e.touches[0].clientX;
+                let mouseY = e.clientY || e.touches[0].clientY;
+                points[i].x = Math.round((mouseX - rect.left) / scaleX);
+                points[i].y = Math.round((mouseY - rect.top) / scaleY);
+                drawQuad(context);
+            }
+            function releasePoint() {
+                canvas.removeEventListener("mousemove", dragPoint);
+                canvas.removeEventListener("mouseup", releasePoint);
+                canvas.removeEventListener("touchmove", dragPoint);
+                canvas.removeEventListener("touchend", releasePoint);
+            }
+            break;
+        }
+    }
+}
+
+function drawQuad(context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "#00ff00";
+    context.lineWidth = 2;
+    for (let i = 0; i < points.length; i++) {
+        context.beginPath();
+        context.arc(points[i].x, points[i].y, 5, 0, 2 * Math.PI);
+        context.stroke();
+    }
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    context.lineTo(points[1].x, points[1].y);
+    context.lineTo(points[2].x, points[2].y);
+    context.lineTo(points[3].x, points[3].y);
+    context.lineTo(points[0].x, points[0].y);
+    context.stroke();
 }
 
 function scan() {

@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/dynamsoft-document-normalizer@1.0.12/dist/ddn.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dynamsoft-label-recognizer@2.2.31/dist/dlr.js"></script>
     <script src="utils.js"></script>
+    <script src="mrz-parser.js"></script>
     <title>Dynamsoft Vision SDKs</title>
 </head>
 
@@ -47,16 +48,17 @@
     <!-- Image File -->
     <div class="container" id="file_container">
         <div>
-            <input type="file" id="image_file" accept="image/*" />
+            <input type="file" id="pick_file" accept="image/*" />
             <button onclick="detect()">Detect</button>
-            <input type="checkbox" id="barcode_checkbox" onchange="checkboxChanged(this)">Barcode
-            <input type="checkbox" id="mrz_checkbox" onchange="checkboxChanged(this)">MRZ
-            <input type="checkbox" id="document_checkbox" onchange="checkboxChanged(this)">Document
+            <input type="checkbox" id="barcode_checkbox" checked>Barcode
+            <input type="checkbox" id="mrz_checkbox" checked>MRZ
+            <input type="checkbox" id="document_checkbox" checked>Document
         </div>
 
         <div class="row">
-            <div id="imageview">
-                <img id="file_image" src="default.png" />
+            <div class="imageview">
+                <img id="image_file" src="default.png" />
+                <canvas id="canvas"></canvas>
             </div>
         </div>
 

@@ -16,6 +16,7 @@ let camera_source = document.getElementById('camera_source');
 let resolution;
 let isDetecting = false;
 let isLooping = false;
+let scan_button = document.getElementById('scan_button');
 
 canvas.addEventListener('dragover', function (event) {
     event.preventDefault();
@@ -361,17 +362,21 @@ function drawQuad(context) {
     context.stroke();
 }
 
-function startScan() {
+function scan() {
     if (!isSDKReady) {
         alert("Please activate the SDK first.");
         return;
     }
-    isDetecting = true;
-    detectionLoop();
-}
 
-function stopScan() {
-    isDetecting = false;
+    if (!isDetecting) {
+        scan_button.innerHTML = "Stop";
+        isDetecting = true;
+        detectionLoop();
+    }
+    else {
+        scan_button.innerHTML = "Scan";
+        isDetecting = false;
+    }
 }
 
 async function detectionLoop() {

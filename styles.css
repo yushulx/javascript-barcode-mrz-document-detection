@@ -6,7 +6,7 @@
 }
 
 .container {
-    max-width: 1280px;
+    max-width: 720px;
     margin: 20px auto;
     padding: 20px;
     border: 1px solid #ddd;
@@ -60,7 +60,7 @@
 }
 
 #imageGrid {
-    width: 1280px;
+    width: 720px;
     height: 720px;
     margin: auto;
     display: grid;
@@ -88,7 +88,7 @@
 }
 
 #imageGrid {
-    width: 1280px;
+    width: 720px;
     height: 720px;
     margin: auto;
     display: grid;
@@ -105,9 +105,9 @@ h1 {
 }
 
 .imageview {
-    max-width: 1280px;
+    max-width: 720px;
     max-height: 720px;
-    width: 1280px;
+    width: 720px;
     height: 720px;
     border: 1px solid #ddd;
     background-color: #eaeaea;
@@ -130,7 +130,7 @@ h1 {
 }
 
 textarea {
-    width: 1240px;
+    width: 680px;
     height: 100px;
     margin: 10px auto;
     padding: 20px;

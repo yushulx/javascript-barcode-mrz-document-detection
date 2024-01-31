@@ -5,11 +5,17 @@ let document_checkbox = document.getElementById("document_checkbox");
 let normalizer;
 let reader;
 let recognizer;
+let cameraEnhancer;
 let isSDKReady = false;
 let canvas = document.getElementById('canvas');
 let img = new Image();
 let image_file = document.getElementById('image_file');
 let points;
+let cameras;
+let camera_source = document.getElementById('camera_source');
+let resolution;
+let isDetecting = false;
+let isLooping = false;
 
 canvas.addEventListener('dragover', function (event) {
     event.preventDefault();
@@ -50,6 +56,17 @@ function loadImage2Canvas(base64Image) {
         detect();
     };
 
+}
+
+async function cameraChanged() {
+    stopScan();
+    while (isLooping) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (cameras != null && cameras.length > 0) {
+        let index = camera_source.selectedIndex;
+        await openCamera(cameraEnhancer, cameras[index]);
+    }
 }
 
 document.addEventListener('paste', (event) => {
@@ -107,6 +124,10 @@ async function activate() {
         recognizer = await Dynamsoft.DLR.LabelRecognizer.createInstance();
         recognizer.ifSaveOriginalImageInACanvas = true;
         await recognizer.updateRuntimeSettingsFromString("MRZ");
+
+        cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance();
+
+        initCamera();
 
         isSDKReady = true;
     }
@@ -340,6 +361,307 @@ function drawQuad(context) {
     context.stroke();
 }
 
-function scan() {
-
+function startScan() {
+    if (!isSDKReady) {
+        alert("Please activate the SDK first.");
+        return;
+    }
+    isDetecting = true;
+    detectionLoop();
 }
+
+function stopScan() {
+    isDetecting = false;
+}
+
+async function detectionLoop() {
+    isLooping = true;
+    let scan_result = document.getElementById('scan_result');
+    scan_result.innerHTML = "";
+    while (isDetecting) {
+        let frame = acquireCameraFrame(cameraEnhancer);
+        let clearCount = 0;
+
+        try {
+            if (barcode_checkbox.checked) {
+                let barcodeResults = await reader.decode(frame);
+                clearOverlay(cameraEnhancer);
+                clearCount += 1;
+                if (barcodeResults.length > 0) {
+                    let txts = [];
+                    for (var i = 0; i < barcodeResults.length; ++i) {
+                        txts.push(barcodeResults[i].barcodeText);
+                        localization = barcodeResults[i].localizationResult;
+                        text = barcodeResults[i].barcodeText;
+
+                        // Draw overlay
+                        drawLine(cameraEnhancer, localization.x1, localization.y1, localization.x2, localization.y2);
+                        drawLine(cameraEnhancer, localization.x2, localization.y2, localization.x3, localization.y3);
+                        drawLine(cameraEnhancer, localization.x3, localization.y3, localization.x4, localization.y4);
+                        drawLine(cameraEnhancer, localization.x4, localization.y4, localization.x1, localization.y1);
+
+                        let x = [localization.x1, localization.x2, localization.x3, localization.x4];
+                        let y = [localization.y1, localization.y2, localization.y3, localization.y4];
+                        x.sort(function (a, b) {
+                            return a - b;
+                        });
+                        y.sort(function (a, b) {
+                            return b - a;
+                        });
+                        let left = x[0];
+                        let top = y[0];
+
+                        drawText(cameraEnhancer, text, left, top + 50);
+                    }
+                    scan_result.innerHTML += txts.join(', ') + '\n';
+                }
+            }
+
+            if (mrz_checkbox.checked) {
+                let mrzResults = await recognizer.recognize(frame);
+                if (clearCount == 0) {
+                    clearOverlay(cameraEnhancer);
+                    clearCount += 1;
+                }
+
+                let txts = [];
+                for (let result of mrzResults) {
+                    for (let line of result.lineResults) {
+                        let text = line.text;
+                        let points = line.location.points;
+                        // Draw overlay
+                        drawLine(cameraEnhancer, points[0].x, points[0].y, points[1].x, points[1].y);
+                        drawLine(cameraEnhancer, points[1].x, points[1].y, points[2].x, points[2].y);
+                        drawLine(cameraEnhancer, points[2].x, points[2].y, points[3].x, points[3].y);
+                        drawLine(cameraEnhancer, points[3].x, points[3].y, points[0].x, points[0].y);
+
+                        let x = [points[0].x, points[1].x, points[0].x, points[0].x];
+                        let y = [points[0].y, points[1].y, points[0].y, points[0].y];
+                        x.sort(function (a, b) {
+                            return a - b;
+                        });
+                        y.sort(function (a, b) {
+                            return b - a;
+                        });
+                        let left = x[0];
+                        let top = y[0];
+
+                        drawText(cameraEnhancer, text, left, top);
+                        txts.push(text);
+                    }
+                }
+
+                if (txts.length == 2) {
+                    scan_result.innerHTML += JSON.stringify(mrzParseTwoLine(txts[0], txts[1])) + '\n';
+                }
+                else if (txts.length == 3) {
+                    scan_result.innerHTML += JSON.stringify(mrzParseThreeLine(txts[0], txts[1], txts[2])) + '\n';
+                }
+            }
+
+            if (document_checkbox.checked) {
+                let documentResults = await normalizer.detectQuad(frame);
+                if (clearCount == 0) {
+                    clearOverlay(cameraEnhancer);
+                    clearCount += 1;
+                }
+
+                if (documentResults.length > 0) {
+                    let quad = documentResults[0];
+                    let points = quad.location.points;
+
+                    // Draw overlay
+                    drawLine(cameraEnhancer, points[0].x, points[0].y, points[1].x, points[1].y);
+                    drawLine(cameraEnhancer, points[1].x, points[1].y, points[2].x, points[2].y);
+                    drawLine(cameraEnhancer, points[2].x, points[2].y, points[3].x, points[3].y);
+                    drawLine(cameraEnhancer, points[3].x, points[3].y, points[0].x, points[0].y);
+
+                    let x = [points[0].x, points[1].x, points[0].x, points[0].x];
+                    let y = [points[0].y, points[1].y, points[0].y, points[0].y];
+                    x.sort(function (a, b) {
+                        return a - b;
+                    });
+                    y.sort(function (a, b) {
+                        return b - a;
+                    });
+                    let left = x[0];
+                    let top = y[0];
+                    drawText(cameraEnhancer, 'Detected document', left, top);
+                }
+            }
+
+            if (clearCount == 0) {
+                clearOverlay(cameraEnhancer);
+                await new Promise(resolve => setTimeout(resolve, 30));
+            }
+        }
+        catch (ex) {
+            console.error(ex);
+        }
+
+    }
+    clearOverlay(cameraEnhancer);
+    isLooping = false;
+}
+
+async function getCameras(cameraEnhancer) {
+    if (!Dynamsoft) return;
+
+    try {
+        return await cameraEnhancer.getAllCameras();
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+async function openCamera(cameraEnhancer, cameraInfo) {
+    if (!Dynamsoft) return;
+
+    try {
+        await cameraEnhancer.selectCamera(cameraInfo);
+        cameraEnhancer.on("played", function () {
+            resolution = cameraEnhancer.getResolution();
+        });
+        await cameraEnhancer.open();
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+async function closeCamera(cameraEnhancer) {
+    if (!Dynamsoft) return;
+
+    try {
+        await cameraEnhancer.close();
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+async function setVideoElement(cameraEnhancer, elementId) {
+    if (!Dynamsoft) return;
+
+    try {
+        let element = document.getElementById(elementId);
+        element.className = "dce-video-container";
+        await cameraEnhancer.setUIElement(element);
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+function acquireCameraFrame(cameraEnhancer) {
+    if (!Dynamsoft) return;
+
+    try {
+        let img = cameraEnhancer.getFrame().toCanvas();
+        return img;
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+async function setResolution(cameraEnhancer, width, height) {
+    if (!Dynamsoft) return;
+
+    try {
+        await cameraEnhancer.setResolution(width, height);
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+function clearOverlay(cameraEnhancer) {
+    if (!Dynamsoft) return;
+
+    try {
+        let drawingLayers = cameraEnhancer.getDrawingLayers();
+        if (drawingLayers.length > 0) {
+            drawingLayers[0].clearDrawingItems();
+        }
+        else {
+            cameraEnhancer.createDrawingLayer();
+        }
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+function drawLine(cameraEnhancer, x1, y1, x2, y2) {
+    if (!Dynamsoft) return;
+
+    try {
+        let drawingLayers = cameraEnhancer.getDrawingLayers();
+        let drawingLayer;
+        let drawingItems = new Array(
+            new Dynamsoft.DCE.DrawingItem.DT_Line({
+                x: x1,
+                y: y1
+            }, {
+                x: x2,
+                y: y2
+            }, 1)
+        )
+        if (drawingLayers.length > 0) {
+            drawingLayer = drawingLayers[0];
+        }
+        else {
+            drawingLayer = cameraEnhancer.createDrawingLayer();
+        }
+        drawingLayer.addDrawingItems(drawingItems);
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+function drawText(cameraEnhancer, text, x, y) {
+    if (!Dynamsoft) return;
+
+    try {
+        let drawingLayers = cameraEnhancer.getDrawingLayers();
+        let drawingLayer;
+        let drawingItems = new Array(
+            new Dynamsoft.DCE.DrawingItem.DT_Text(text, x, y, 1),
+        )
+        if (drawingLayers.length > 0) {
+            drawingLayer = drawingLayers[0];
+        }
+        else {
+            drawingLayer = cameraEnhancer.createDrawingLayer();
+        }
+        drawingLayer.addDrawingItems(drawingItems);
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+
+async function initCamera() {
+    try {
+        cameras = await getCameras(cameraEnhancer);
+        if (cameras != null && cameras.length > 0) {
+            for (let i = 0; i < cameras.length; i++) {
+                let option = document.createElement("option");
+                option.text = cameras[i].label;
+                camera_source.add(option);
+            }
+            await setVideoElement(cameraEnhancer, "camera_view");
+            await openCamera(cameraEnhancer, cameras[0]);
+        }
+        else {
+            alert("No camera found.");
+        }
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+}
+

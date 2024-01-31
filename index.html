@@ -28,7 +28,7 @@
                     Get a License key from <a href="https://www.dynamsoft.com/customer/license/trialLicense"
                         target="_blank">here</a>
                 </label>
-                <input type="text" id="license_key" style="width: 100%;"
+                <input type="text" id="license_key"
                     value="DLS2eyJoYW5kc2hha2VDb2RlIjoiMjAwMDAxLTE2NDk4Mjk3OTI2MzUiLCJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSIsInNlc3Npb25QYXNzd29yZCI6IndTcGR6Vm05WDJrcEQ5YUoifQ=="
                     placeholder="DLS2eyJoYW5kc2hha2VDb2RlIjoiMjAwMDAxLTE2NDk4Mjk3OTI2MzUiLCJvcmdhbml6YXRpb25JRCI6IjIwMDAwMSIsInNlc3Npb25QYXNzd29yZCI6IndTcGR6Vm05WDJrcEQ5YUoifQ==">
                 <button onclick="activate()">Activate SDK</button>
@@ -41,6 +41,9 @@
                     <option value="file">File</option>
                     <option value="camera">Camera</option>
                 </select>
+                <input type="checkbox" id="barcode_checkbox" checked>Barcode
+                <input type="checkbox" id="mrz_checkbox">MRZ
+                <input type="checkbox" id="document_checkbox">Document
             </div>
         </div>
     </div>
@@ -50,9 +53,9 @@
         <div>
             <input type="file" id="pick_file" accept="image/*" />
             <button onclick="detect()">Detect</button>
-            <input type="checkbox" id="barcode_checkbox" checked>Barcode
+            <!-- <input type="checkbox" id="barcode_checkbox" checked>Barcode
             <input type="checkbox" id="mrz_checkbox" checked>MRZ
-            <input type="checkbox" id="document_checkbox" checked>Document
+            <input type="checkbox" id="document_checkbox" checked>Document -->
         </div>
 
         <div class="row">
@@ -79,21 +82,24 @@
     <!-- Camera Stream -->
     <div class="container" id="camera_container">
         <div>
-            <button onclick="scan()">Detect</button>
-            <input type="checkbox" name="format" value="grayscale" onchange="checkboxChanged()">Grayscale
-            <input type="checkbox" name="format" value="color" onchange="checkboxChanged()">Color
-            <input type="checkbox" name="format" value="binary" onchange="checkboxChanged()">B&W
-        </div>
+            <select onchange="cameraChanged()" id="camera_source">
+            </select>
+            <button onclick="startScan()">Start</button>
+            <button onclick="stopScan()">Stop</button>
 
-        <div class="row">
-            <div>
-                <textarea id="scan_result"></textarea>
+            <div id="videoview">
+                <div id="camera_view"></div>
             </div>
+
+            <div class="row">
+                <div>
+                    <textarea id="scan_result"></textarea>
+                </div>
+            </div>
+
         </div>
 
-    </div>
-
-    <script src="main.js"></script>
+        <script src="main.js"></script>
 </body>
 
 </html>

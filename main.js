@@ -7,23 +7,30 @@ let reader;
 let recognizer;
 let cameraEnhancer;
 let isSDKReady = false;
-let canvas = document.getElementById('canvas');
+let overlay_canvas = document.getElementById('overlay_canvas');
 let img = new Image();
 let image_file = document.getElementById('image_file');
-let points;
+let globalPoints;
 let cameras;
 let camera_source = document.getElementById('camera_source');
 let resolution;
 let isDetecting = false;
 let isLooping = false;
 let scan_button = document.getElementById('scan_button');
+let target_file = document.getElementById('target_file');
+let target_canvas = document.getElementById('target_canvas');
+let rectified_image = document.getElementById('rectified_image');
+let document_editor = document.getElementById('document_editor');
+let edit_view = document.getElementById('edit_view');
+let rectify_view = document.getElementById('rectify_view');
+let isCaptured = false;
 
-canvas.addEventListener('dragover', function (event) {
+overlay_canvas.addEventListener('dragover', function (event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
 }, false);
 
-canvas.addEventListener('drop', function (event) {
+overlay_canvas.addEventListener('drop', function (event) {
     event.preventDefault();
     if (event.dataTransfer.files.length > 0) {
         let file = event.dataTransfer.files[0];
@@ -43,6 +50,10 @@ function selectChanged() {
     switchProduct(dropdown.value)
 }
 
+function capture() {
+    isCaptured = true;
+}
+
 function loadImage2Canvas(base64Image) {
     image_file.src = base64Image;
     img.src = base64Image;
@@ -50,9 +61,11 @@ function loadImage2Canvas(base64Image) {
         let width = img.width;
         let height = img.height;
 
-        let canvas = document.getElementById('canvas');
-        canvas.width = width;
-        canvas.height = height;
+        overlay_canvas.width = width;
+        overlay_canvas.height = height;
+
+        target_canvas.width = width;
+        target_canvas.height = height;
 
         detect();
     };
@@ -60,7 +73,7 @@ function loadImage2Canvas(base64Image) {
 }
 
 async function cameraChanged() {
-    stopScan();
+    isDetecting = false;
     while (isLooping) {
         await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -118,12 +131,12 @@ async function activate() {
         await Dynamsoft.DDN.DocumentNormalizer.loadWasm();
 
         reader = await Dynamsoft.DBR.BarcodeReader.createInstance();
-        reader.ifSaveOriginalImageInACanvas = true;
+        // reader.ifSaveOriginalImageInACanvas = true;
 
         normalizer = await Dynamsoft.DDN.DocumentNormalizer.createInstance();
 
         recognizer = await Dynamsoft.DLR.LabelRecognizer.createInstance();
-        recognizer.ifSaveOriginalImageInACanvas = true;
+        // recognizer.ifSaveOriginalImageInACanvas = true;
         await recognizer.updateRuntimeSettingsFromString("MRZ");
 
         cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance();
@@ -169,8 +182,8 @@ async function detect() {
 
     let detection_result = document.getElementById('detection_result');
     detection_result.innerHTML = "";
-    let context = canvas.getContext('2d');
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    let context = overlay_canvas.getContext('2d');
+    context.clearRect(0, 0, overlay_canvas.width, overlay_canvas.height);
     try {
         if (barcode_checkbox.checked) {
             let barcodeResults = await reader.decode(img);
@@ -260,29 +273,29 @@ async function detect() {
 
             if (documentResults.length > 0) {
                 let quad = documentResults[0];
-                points = quad.location.points;
+                globalPoints = quad.location.points;
 
-                // canvas.addEventListener("mousedown", (event) => updatePoint(event, context));
-                // canvas.addEventListener("touchstart", (event) => updatePoint(event, context));
+                // Start document editor
+                openEditor(img.src)
 
                 // Draw overlay
                 context.strokeStyle = "#00ff00";
                 context.lineWidth = 2;
-                for (let i = 0; i < points.length; i++) {
+                for (let i = 0; i < globalPoints.length; i++) {
                     context.beginPath();
-                    context.arc(points[i].x, points[i].y, 5, 0, 2 * Math.PI);
+                    context.arc(globalPoints[i].x, globalPoints[i].y, 5, 0, 2 * Math.PI);
                     context.stroke();
                 }
                 context.beginPath();
-                context.moveTo(points[0].x, points[0].y);
-                context.lineTo(points[1].x, points[1].y);
-                context.lineTo(points[2].x, points[2].y);
-                context.lineTo(points[3].x, points[3].y);
-                context.lineTo(points[0].x, points[0].y);
+                context.moveTo(globalPoints[0].x, globalPoints[0].y);
+                context.lineTo(globalPoints[1].x, globalPoints[1].y);
+                context.lineTo(globalPoints[2].x, globalPoints[2].y);
+                context.lineTo(globalPoints[3].x, globalPoints[3].y);
+                context.lineTo(globalPoints[0].x, globalPoints[0].y);
                 context.stroke();
 
-                let x = [points[0].x, points[1].x, points[0].x, points[0].x];
-                let y = [points[0].y, points[1].y, points[0].y, points[0].y];
+                let x = [globalPoints[0].x, globalPoints[1].x, globalPoints[0].x, globalPoints[0].x];
+                let y = [globalPoints[0].y, globalPoints[1].y, globalPoints[0].y, globalPoints[0].y];
                 x.sort(function (a, b) {
                     return a - b;
                 });
@@ -307,31 +320,128 @@ async function detect() {
     toggleLoading(false);
 }
 
-function updatePoint(e, context) {
-    if (!points) {
+function openEditor(image) {
+    let target_context = target_canvas.getContext('2d');
+    target_canvas.addEventListener("mousedown", (event) => updatePoint(event, target_context, target_canvas));
+    target_canvas.addEventListener("touchstart", (event) => updatePoint(event, target_context, target_canvas));
+    drawQuad(target_context, target_canvas);
+    target_file.src = image;
+}
+
+async function edit() {
+    edit_view.style.display = "block";
+    rectify_view.style.display = "none";
+}
+
+async function rectify() {
+    if (!globalPoints) {
         return;
     }
-    let rect = canvas.getBoundingClientRect();
+    let final_canvas = await rectifyCanvas(normalizer, target_file, globalPoints);
+    if (final_canvas == null) { return }
+    rectified_image.src = final_canvas.toDataURL();
+    rectify_view.style.display = "block";
+    edit_view.style.display = "none";
+}
 
-    let scaleX = canvas.clientWidth / canvas.width;
-    let scaleY = canvas.clientHeight / canvas.height;
-    let mouseX = (e.clientX - rect.left) / scaleX;
-    let mouseY = (e.clientY - rect.top) / scaleY;
+async function save() {
+    let image = document.getElementById('rectified_image');
+    let imageUrl = image.src;
 
-    let delta = 10;
-    for (let i = 0; i < points.length; i++) {
-        if (Math.abs(points[i].x - mouseX) < delta && Math.abs(points[i].y - mouseY) < delta) {
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = 'image';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function checkChanged() {
+    if (document_checkbox.checked) {
+        document_editor.style.display = "block";
+    }
+    else {
+        document_editor.style.display = "none";
+    }
+}
+async function rectifyCanvas(normalizer, source, points) {
+    if (!Dynamsoft) return;
+
+    try {
+        let result = await normalizer.normalize(source, { quad: { points: points } });
+        if (result.image) {
+            return result.image.toCanvas();
+        }
+        else {
+            return null;
+        }
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+    return null;
+}
+
+async function setFilter(normalizer, filter) {
+    if (!Dynamsoft) return;
+
+    try {
+        let settings = await normalizer.getRuntimeSettings();
+        settings.ImageParameterArray[0].BinarizationModes[0].ThresholdCompensation = 10;
+        settings.NormalizerParameterArray[0].ColourMode = filter;
+        await normalizer.setRuntimeSettings(settings);
+    }
+    catch (ex) {
+        console.error(ex);
+    }
+    return null;
+}
+
+function updatePoint(e, context, canvas) {
+    if (!globalPoints) {
+        return;
+    }
+
+    function getCoordinates(e) {
+        let rect = canvas.getBoundingClientRect();
+
+        let scaleX = canvas.clientWidth / canvas.width;
+        let scaleY = canvas.clientHeight / canvas.height;
+
+        let mouseX = e.clientX || e.touches[0].clientX;
+        let mouseY = e.clientX || e.touches[0].clientY;
+        if (scaleX < scaleY) {
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top - (canvas.clientHeight - canvas.height * scaleX) / 2;
+
+            mouseX = mouseX / scaleX;
+            mouseY = mouseY / scaleX;
+        }
+        else {
+            mouseX = e.clientX - rect.left - (canvas.clientWidth - canvas.width * scaleY) / 2;
+            mouseY = e.clientY - rect.top;
+
+            mouseX = mouseX / scaleY;
+            mouseY = mouseY / scaleY;
+        }
+
+        return { x: Math.round(mouseX), y: Math.round(mouseY) };
+    }
+
+    let delta = 5;
+    let coordinates = getCoordinates(e);
+
+    for (let i = 0; i < globalPoints.length; i++) {
+        if (Math.abs(globalPoints[i].x - coordinates.x) < delta && Math.abs(globalPoints[i].y - coordinates.y) < delta) {
             canvas.addEventListener("mousemove", dragPoint);
             canvas.addEventListener("mouseup", releasePoint);
             canvas.addEventListener("touchmove", dragPoint);
             canvas.addEventListener("touchend", releasePoint);
             function dragPoint(e) {
-                let rect = canvas.getBoundingClientRect();
-                let mouseX = e.clientX || e.touches[0].clientX;
-                let mouseY = e.clientY || e.touches[0].clientY;
-                points[i].x = Math.round((mouseX - rect.left) / scaleX);
-                points[i].y = Math.round((mouseY - rect.top) / scaleY);
-                drawQuad(context);
+                coordinates = getCoordinates(e);
+                globalPoints[i].x = coordinates.x;
+                globalPoints[i].y = coordinates.y;
+                drawQuad(context, canvas);
             }
             function releasePoint() {
                 canvas.removeEventListener("mousemove", dragPoint);
@@ -344,21 +454,21 @@ function updatePoint(e, context) {
     }
 }
 
-function drawQuad(context) {
+function drawQuad(context, canvas) {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.strokeStyle = "#00ff00";
     context.lineWidth = 2;
-    for (let i = 0; i < points.length; i++) {
+    for (let i = 0; i < globalPoints.length; i++) {
         context.beginPath();
-        context.arc(points[i].x, points[i].y, 5, 0, 2 * Math.PI);
+        context.arc(globalPoints[i].x, globalPoints[i].y, 5, 0, 2 * Math.PI);
         context.stroke();
     }
     context.beginPath();
-    context.moveTo(points[0].x, points[0].y);
-    context.lineTo(points[1].x, points[1].y);
-    context.lineTo(points[2].x, points[2].y);
-    context.lineTo(points[3].x, points[3].y);
-    context.lineTo(points[0].x, points[0].y);
+    context.moveTo(globalPoints[0].x, globalPoints[0].y);
+    context.lineTo(globalPoints[1].x, globalPoints[1].y);
+    context.lineTo(globalPoints[2].x, globalPoints[2].y);
+    context.lineTo(globalPoints[3].x, globalPoints[3].y);
+    context.lineTo(globalPoints[0].x, globalPoints[0].y);
     context.stroke();
 }
 
@@ -371,7 +481,7 @@ function scan() {
     if (!isDetecting) {
         scan_button.innerHTML = "Stop";
         isDetecting = true;
-        detectionLoop();
+        startDetectionLoop();
     }
     else {
         scan_button.innerHTML = "Scan";
@@ -379,7 +489,7 @@ function scan() {
     }
 }
 
-async function detectionLoop() {
+async function startDetectionLoop() {
     isLooping = true;
     let scan_result = document.getElementById('scan_result');
     scan_result.innerHTML = "";
@@ -475,6 +585,14 @@ async function detectionLoop() {
                     let quad = documentResults[0];
                     let points = quad.location.points;
 
+                    if (isCaptured) {
+                        isCaptured = false;
+                        globalPoints = points;
+                        target_canvas.width = resolution[0];
+                        target_canvas.height = resolution[1];
+                        openEditor(frame.toDataURL());
+                    }
+
                     // Draw overlay
                     drawLine(cameraEnhancer, points[0].x, points[0].y, points[1].x, points[1].y);
                     drawLine(cameraEnhancer, points[1].x, points[1].y, points[2].x, points[2].y);
@@ -492,6 +610,7 @@ async function detectionLoop() {
                     let left = x[0];
                     let top = y[0];
                     drawText(cameraEnhancer, 'Detected document', left, top);
+
                 }
             }
 

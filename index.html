@@ -43,7 +43,7 @@
                 </select>
                 <input type="checkbox" id="barcode_checkbox" checked>Barcode
                 <input type="checkbox" id="mrz_checkbox">MRZ
-                <input type="checkbox" id="document_checkbox">Document
+                <input type="checkbox" id="document_checkbox" onchange="checkChanged()">Document
             </div>
         </div>
     </div>
@@ -61,7 +61,7 @@
         <div class="row">
             <div class="imageview">
                 <img id="image_file" src="default.png" />
-                <canvas id="canvas"></canvas>
+                <canvas id="overlay_canvas" class="overlay"></canvas>
             </div>
         </div>
 
@@ -85,7 +85,7 @@
             <select onchange="cameraChanged()" id="camera_source">
             </select>
             <button onclick="scan()" id="scan_button">Start</button>
-
+            <button onclick="capture()">Capture a document</button>
             <div id="videoview">
                 <div id="camera_view"></div>
             </div>
@@ -97,8 +97,25 @@
             </div>
 
         </div>
+    </div>
 
-        <script src="main.js"></script>
+    <!-- Document Editor -->
+    <div class="container" id="document_editor">
+        <div>
+            <button onclick="edit()">Edit</button>
+            <button onclick="rectify()">Rectify</button>
+            <button onclick="save()">Save</button>
+        </div>
+        <div class="imageview" id="edit_view">
+            <img id="target_file" src="default.png" />
+            <canvas id="target_canvas" class="overlay"></canvas>
+        </div>
+        <div class="imageview" id="rectify_view">
+            <img id="rectified_image" src="default.png" />
+        </div>
+    </div>
+
+    <script src="main.js"></script>
 </body>
 
 </html>

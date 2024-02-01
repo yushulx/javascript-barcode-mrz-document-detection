@@ -426,7 +426,7 @@ function updatePoint(e, context, canvas) {
         return { x: Math.round(mouseX), y: Math.round(mouseY) };
     }
 
-    let delta = 5;
+    let delta = 10;
     let coordinates = getCoordinates(e);
 
     for (let i = 0; i < globalPoints.length; i++) {

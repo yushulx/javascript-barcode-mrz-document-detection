@@ -1,36 +1,37 @@
 let dropdown = document.getElementById("dropdown");
-let barcode_checkbox = document.getElementById("barcode_checkbox");
-let mrz_checkbox = document.getElementById("mrz_checkbox");
-let document_checkbox = document.getElementById("document_checkbox");
+let barcodeCheckbox = document.getElementById("barcode_checkbox");
+let mrzCheckbox = document.getElementById("mrz_checkbox");
+let documentCheckbox = document.getElementById("document_checkbox");
+let scanButton = document.getElementById('scan_button');
+let targetFile = document.getElementById('target_file');
+let targetCanvas = document.getElementById('target_canvas');
+let rectifiedImage = document.getElementById('rectified_image');
+let documentEditor = document.getElementById('document_editor');
+let editView = document.getElementById('edit_view');
+let rectifyView = document.getElementById('rectify_view');
+let cameraSource = document.getElementById('camera_source');
+let imageFile = document.getElementById('image_file');
+let overlayCanvas = document.getElementById('overlay_canvas');
+
 let normalizer;
 let reader;
 let recognizer;
 let cameraEnhancer;
 let isSDKReady = false;
-let overlay_canvas = document.getElementById('overlay_canvas');
 let img = new Image();
-let image_file = document.getElementById('image_file');
 let globalPoints;
 let cameras;
-let camera_source = document.getElementById('camera_source');
 let resolution;
 let isDetecting = false;
 let isLooping = false;
-let scan_button = document.getElementById('scan_button');
-let target_file = document.getElementById('target_file');
-let target_canvas = document.getElementById('target_canvas');
-let rectified_image = document.getElementById('rectified_image');
-let document_editor = document.getElementById('document_editor');
-let edit_view = document.getElementById('edit_view');
-let rectify_view = document.getElementById('rectify_view');
 let isCaptured = false;
 
-overlay_canvas.addEventListener('dragover', function (event) {
+overlayCanvas.addEventListener('dragover', function (event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
 }, false);
 
-overlay_canvas.addEventListener('drop', function (event) {
+overlayCanvas.addEventListener('drop', function (event) {
     event.preventDefault();
     if (event.dataTransfer.files.length > 0) {
         let file = event.dataTransfer.files[0];
@@ -55,17 +56,17 @@ function capture() {
 }
 
 function loadImage2Canvas(base64Image) {
-    image_file.src = base64Image;
+    imageFile.src = base64Image;
     img.src = base64Image;
     img.onload = function () {
         let width = img.width;
         let height = img.height;
 
-        overlay_canvas.width = width;
-        overlay_canvas.height = height;
+        overlayCanvas.width = width;
+        overlayCanvas.height = height;
 
-        target_canvas.width = width;
-        target_canvas.height = height;
+        targetCanvas.width = width;
+        targetCanvas.height = height;
 
         detect();
     };
@@ -78,7 +79,7 @@ async function cameraChanged() {
         await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (cameras != null && cameras.length > 0) {
-        let index = camera_source.selectedIndex;
+        let index = cameraSource.selectedIndex;
         await openCamera(cameraEnhancer, cameras[index]);
     }
 }
@@ -131,12 +132,10 @@ async function activate() {
         await Dynamsoft.DDN.DocumentNormalizer.loadWasm();
 
         reader = await Dynamsoft.DBR.BarcodeReader.createInstance();
-        // reader.ifSaveOriginalImageInACanvas = true;
 
         normalizer = await Dynamsoft.DDN.DocumentNormalizer.createInstance();
 
         recognizer = await Dynamsoft.DLR.LabelRecognizer.createInstance();
-        // recognizer.ifSaveOriginalImageInACanvas = true;
         await recognizer.updateRuntimeSettingsFromString("MRZ");
 
         cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance();
@@ -182,10 +181,10 @@ async function detect() {
 
     let detection_result = document.getElementById('detection_result');
     detection_result.innerHTML = "";
-    let context = overlay_canvas.getContext('2d');
-    context.clearRect(0, 0, overlay_canvas.width, overlay_canvas.height);
+    let context = overlayCanvas.getContext('2d');
+    context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     try {
-        if (barcode_checkbox.checked) {
+        if (barcodeCheckbox.checked) {
             let barcodeResults = await reader.decode(img);
             if (barcodeResults.length > 0) {
                 let txts = [];
@@ -224,7 +223,7 @@ async function detect() {
             }
         }
 
-        if (mrz_checkbox.checked) {
+        if (mrzCheckbox.checked) {
             let mrzResults = await recognizer.recognize(img);
             let txts = [];
             for (let result of mrzResults) {
@@ -268,7 +267,7 @@ async function detect() {
             }
         }
 
-        if (document_checkbox.checked) {
+        if (documentCheckbox.checked) {
             let documentResults = await normalizer.detectQuad(img);
 
             if (documentResults.length > 0) {
@@ -321,32 +320,31 @@ async function detect() {
 }
 
 function openEditor(image) {
-    let target_context = target_canvas.getContext('2d');
-    target_canvas.addEventListener("mousedown", (event) => updatePoint(event, target_context, target_canvas));
-    target_canvas.addEventListener("touchstart", (event) => updatePoint(event, target_context, target_canvas));
-    drawQuad(target_context, target_canvas);
-    target_file.src = image;
+    let target_context = targetCanvas.getContext('2d');
+    targetCanvas.addEventListener("mousedown", (event) => updatePoint(event, target_context, targetCanvas));
+    targetCanvas.addEventListener("touchstart", (event) => updatePoint(event, target_context, targetCanvas));
+    drawQuad(target_context, targetCanvas);
+    targetFile.src = image;
 }
 
 async function edit() {
-    edit_view.style.display = "block";
-    rectify_view.style.display = "none";
+    editView.style.display = "block";
+    rectifyView.style.display = "none";
 }
 
 async function rectify() {
     if (!globalPoints) {
         return;
     }
-    let final_canvas = await rectifyCanvas(normalizer, target_file, globalPoints);
+    let final_canvas = await rectifyCanvas(normalizer, targetFile, globalPoints);
     if (final_canvas == null) { return }
-    rectified_image.src = final_canvas.toDataURL();
-    rectify_view.style.display = "block";
-    edit_view.style.display = "none";
+    rectifiedImage.src = final_canvas.toDataURL();
+    rectifyView.style.display = "block";
+    editView.style.display = "none";
 }
 
 async function save() {
-    let image = document.getElementById('rectified_image');
-    let imageUrl = image.src;
+    let imageUrl = rectifiedImage.src;
 
     const a = document.createElement('a');
     a.href = imageUrl;
@@ -357,11 +355,11 @@ async function save() {
 }
 
 function checkChanged() {
-    if (document_checkbox.checked) {
-        document_editor.style.display = "block";
+    if (documentCheckbox.checked) {
+        documentEditor.style.display = "block";
     }
     else {
-        document_editor.style.display = "none";
+        documentEditor.style.display = "none";
     }
 }
 async function rectifyCanvas(normalizer, source, points) {
@@ -479,12 +477,12 @@ function scan() {
     }
 
     if (!isDetecting) {
-        scan_button.innerHTML = "Stop";
+        scanButton.innerHTML = "Stop";
         isDetecting = true;
         startDetectionLoop();
     }
     else {
-        scan_button.innerHTML = "Scan";
+        scanButton.innerHTML = "Scan";
         isDetecting = false;
     }
 }
@@ -498,7 +496,7 @@ async function startDetectionLoop() {
         let clearCount = 0;
 
         try {
-            if (barcode_checkbox.checked) {
+            if (barcodeCheckbox.checked) {
                 let barcodeResults = await reader.decode(frame);
                 clearOverlay(cameraEnhancer);
                 clearCount += 1;
@@ -532,7 +530,7 @@ async function startDetectionLoop() {
                 }
             }
 
-            if (mrz_checkbox.checked) {
+            if (mrzCheckbox.checked) {
                 let mrzResults = await recognizer.recognize(frame);
                 if (clearCount == 0) {
                     clearOverlay(cameraEnhancer);
@@ -574,7 +572,7 @@ async function startDetectionLoop() {
                 }
             }
 
-            if (document_checkbox.checked) {
+            if (documentCheckbox.checked) {
                 let documentResults = await normalizer.detectQuad(frame);
                 if (clearCount == 0) {
                     clearOverlay(cameraEnhancer);
@@ -588,8 +586,8 @@ async function startDetectionLoop() {
                     if (isCaptured) {
                         isCaptured = false;
                         globalPoints = points;
-                        target_canvas.width = resolution[0];
-                        target_canvas.height = resolution[1];
+                        targetCanvas.width = resolution[0];
+                        targetCanvas.height = resolution[1];
                         openEditor(frame.toDataURL());
                     }
 
@@ -775,7 +773,7 @@ async function initCamera() {
             for (let i = 0; i < cameras.length; i++) {
                 let option = document.createElement("option");
                 option.text = cameras[i].label;
-                camera_source.add(option);
+                cameraSource.add(option);
             }
             await setVideoElement(cameraEnhancer, "camera_view");
             await openCamera(cameraEnhancer, cameras[0]);
